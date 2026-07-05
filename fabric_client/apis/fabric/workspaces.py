@@ -9,7 +9,6 @@ from typing import TYPE_CHECKING, Any, cast
 from fabric_client.core.collection import LazyCollection
 from fabric_client.core.endpoint import Endpoint
 from fabric_client.core.paginator import Paginator
-from fabric_client.models.scan import WorkspaceScanResult
 from fabric_client.models.workspace import Workspace
 
 if TYPE_CHECKING:
@@ -51,17 +50,6 @@ class WorkspacesAPI:
         collection = await self.list()
         async for item in collection:
             yield item
-
-    @property
-    def scanned(self) -> ScannedWorkspaces:
-        """Iterate workspaces with admin scan results injected.
-
-        Usage::
-
-            async for ws in client.workspaces.scanned:
-                print(ws.scanned.dataflows)  # scan-enriched metadata
-        """
-        return ScannedWorkspaces(self)
 
     # -- API methods ----------------------------------------------------
 
@@ -147,41 +135,3 @@ class WorkspacesAPI:
         endpoint = Endpoint("DELETE", "/workspaces/{workspaceId}")
         url = endpoint.build_url(self._client.base_url, workspaceId=workspace_id)
         await self._client._request("DELETE", url)
-
-
-class ScannedWorkspaces:
-    """Iterate workspaces with admin scan results lazily injected.
-
-    Kicks off a background scan when iteration begins and attaches
-    results to each :class:`Workspace` via ``.scanned``.
-
-    Usage::
-
-        async for ws in client.workspaces.scanned:
-            print(ws.scanned.state)
-            async for df in ws.dataflows:
-                print(df.workspace.scanned.state)
-    """
-
-    def __init__(self, api: WorkspacesAPI) -> None:
-        """Initialize with the workspace API."""
-        self._api = api
-
-    async def __aiter__(self) -> AsyncIterator[Workspace]:
-        """List workspaces, await scan, then yield enriched results."""
-        from fabric_client.services.scan import WorkspaceScanService
-
-        workspaces = await self._api._resolve()
-        if not workspaces:
-            return
-
-        ws_ids = [ws.id for ws in workspaces]
-        scan_service = WorkspaceScanService(self._api._client)
-
-        # Run scan and wait for completion
-        results = await scan_service.scan(ws_ids)
-        scan_cache: dict[str, WorkspaceScanResult] = {r.id: r for r in results}
-
-        for ws in workspaces:
-            ws._scan_cache = scan_cache  # type: ignore[attr-defined]
-            yield ws

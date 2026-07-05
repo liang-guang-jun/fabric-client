@@ -1,12 +1,14 @@
-"""Admin workspace scan service."""
+"""Admin workspace scan service and scan() entry point."""
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import AsyncIterator, Iterable
 from typing import TYPE_CHECKING, Any
 
 from fabric_client.models.scan import WorkspaceScanResult
+from fabric_client.models.workspace import Workspace
 
 if TYPE_CHECKING:
     from fabric_client.client import FabricClient
@@ -16,16 +18,53 @@ logger = logging.getLogger(__name__)
 _SCAN_BATCH_SIZE = 100
 
 
-class WorkspaceScanService:
-    """Orchestrate admin workspace scans.
+async def scan(
+    workspaces: Iterable[Workspace],
+    *,
+    lineage: bool = True,
+    datasource_details: bool = True,
+    dataset_schema: bool = True,
+    dataset_expressions: bool = True,
+    get_artifact_users: bool = True,
+    timeout: int = 7200,
+) -> AsyncIterator[Workspace]:
+    """Scan workspaces and yield them with ``.scanned`` data injected.
 
     Usage::
 
-        scan = WorkspaceScanService(client)
-        results = await scan.scan(["ws-id-1", "ws-id-2"])
-        for r in results:
-            print(r.datasets)
+        async for ws in scan(await client.workspaces):
+            print(ws.scanned.state)
+
+        # Or with a filtered subset
+        filtered = [w for w in await client.workspaces if "Prod" in w.display_name]
+        async for ws in scan(filtered):
+            print(ws.scanned.dataflows)
     """
+    ws_list = list(workspaces)
+    if not ws_list:
+        return
+
+    client: FabricClient = ws_list[0]._client
+    ws_ids = [ws.id for ws in ws_list]
+    service = WorkspaceScanService(client)
+    results = await service.scan(
+        ws_ids,
+        lineage=lineage,
+        datasource_details=datasource_details,
+        dataset_schema=dataset_schema,
+        dataset_expressions=dataset_expressions,
+        get_artifact_users=get_artifact_users,
+        timeout=timeout,
+    )
+    scan_cache: dict[str, WorkspaceScanResult] = {r.id: r for r in results}
+
+    for ws in ws_list:
+        ws._scan_cache = scan_cache  # type: ignore[attr-defined]
+        yield ws
+
+
+class WorkspaceScanService:
+    """Orchestrate admin workspace scans (low-level)."""
 
     def __init__(self, client: FabricClient) -> None:
         """Initialize with a client."""
