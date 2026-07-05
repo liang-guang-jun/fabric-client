@@ -43,6 +43,13 @@ class Resource[M: pydantic.BaseModel]:
         self._client = client
         self._data = data
         self._pydantic: M | None = None
+        # Back-reference to parent workspace (set by scoped collections)
+        self._workspace: Resource[Any] | None = None
+
+    @property
+    def workspace(self) -> Resource[Any] | None:
+        """Parent :class:`Workspace` this resource belongs to, if known."""
+        return self._workspace
 
     def __repr__(self) -> str:
         """Return a human-readable representation."""
@@ -81,6 +88,23 @@ class Resource[M: pydantic.BaseModel]:
             )
         self._pydantic = self._model.model_validate(self._data)
         return self._pydantic
+
+    def __getattr__(self, name: str) -> Any:  # noqa: ANN401
+        """Delegate unknown attributes to the Pydantic model.
+
+        Enables shorthand access::
+
+            ws.display_name        # → ws.pydantic.display_name
+            ws.model_dump()        # → ws.pydantic.model_dump()
+        """
+        # Avoid recursion when _pydantic / _model aren't set yet
+        if name.startswith("_"):
+            raise AttributeError(name)
+        try:
+            model = self.pydantic
+        except NotImplementedError:
+            raise AttributeError(name) from None
+        return getattr(model, name)
 
     @property
     def extra(self) -> dict[str, Any]:

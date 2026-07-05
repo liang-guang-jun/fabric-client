@@ -9,6 +9,7 @@ import pydantic
 
 from fabric_client.core.collection import LazyCollection
 from fabric_client.core.resource import Resource
+from fabric_client.models.scan import WorkspaceScanResult
 
 if TYPE_CHECKING:
     from fabric_client.apis.scoped import (
@@ -26,6 +27,8 @@ class WorkspaceModel(pydantic.BaseModel):
     display_name: str = pydantic.Field(alias="displayName")
     description: str = ""
     capacity_id: str | None = pydantic.Field(default=None, alias="capacityId")
+    capacity_region: str | None = pydantic.Field(default=None, alias="capacityRegion")
+    domain_id: str | None = pydantic.Field(default=None, alias="domainId")
     type: str = "Workspace"
 
     model_config = pydantic.ConfigDict(populate_by_name=True)
@@ -84,6 +87,19 @@ class Workspace(Resource[WorkspaceModel]):
             self.dataflows._resolve(),
         )
 
+    # -- scan --------------------------------------------------------------
+
+    @property
+    def scanned(self) -> WorkspaceScanResult:
+        """Admin scan result, populated after ``client.workspaces.scanned``."""
+        cache: dict[str, WorkspaceScanResult] = getattr(self, "_scan_cache", {})
+        result = cache.get(self.id)
+        if result is None:
+            raise RuntimeError(
+                "No scan result. Iterate via client.workspaces.scanned first."
+            )
+        return result
+
     # -- lifecycle ---------------------------------------------------------
 
     async def refresh(self) -> None:
@@ -92,7 +108,8 @@ class Workspace(Resource[WorkspaceModel]):
 
     @staticmethod
     async def list(
-        client: FabricClient, **params: Any  # noqa: ANN401
+        client: FabricClient,
+        **params: Any,  # noqa: ANN401
     ) -> LazyCollection[Workspace]:
         """List all workspaces accessible by the authenticated principal."""
         from fabric_client.apis.fabric.workspaces import WorkspacesAPI

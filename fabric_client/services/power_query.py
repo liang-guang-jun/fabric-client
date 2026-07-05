@@ -12,14 +12,23 @@ import pydantic
 from fabric_client.models.dataflow import Dataflow
 
 
-class DataflowSource(pydantic.BaseModel):
-    """A single Power Query ``shared`` declaration extracted from a dataflow."""
+class PowerQuerySection(pydantic.BaseModel):
+    """A single Power Query shared declaration from a dataflow or dataset."""
 
     name: str
     """The query / table name."""
 
     expression: str
     """The Power Query M expression body."""
+
+    workspace_id: str | None = None
+    """The workspace this source belongs to."""
+
+    refreshable_type: str | None = None
+    """The type of refreshable resource: ``dataflow`` or ``dataset``."""
+
+    refreshable_id: str | None = None
+    """The ID of the dataflow or dataset this source belongs to."""
 
 
 class PowerQueryParser:
@@ -46,11 +55,11 @@ class PowerQueryParser:
     def __init__(self, dataflow: Dataflow) -> None:
         """Initialize with the target dataflow."""
         self._df = dataflow
-        self._sources: list[DataflowSource] | None = None
+        self._sources: list[PowerQuerySection] | None = None
 
     # -- public API ------------------------------------------------------------
 
-    async def sources(self) -> list[DataflowSource]:
+    async def sources(self) -> list[PowerQuerySection]:
         """Fetch and parse sources (cached after first call)."""
         if self._sources is not None:
             return self._sources
@@ -62,14 +71,19 @@ class PowerQueryParser:
         else:
             self._sources = []
             return self._sources
-        self._sources = self._parse(pq)
+        self._sources = self._parse(
+            pq,
+            workspace_id=self._df.pydantic.workspace_id,
+            refreshable_type="dataflow",
+            refreshable_id=self._df.id,
+        )
         return self._sources
 
-    def __await__(self) -> Generator[Any, None, list[DataflowSource]]:
+    def __await__(self) -> Generator[Any, None, list[PowerQuerySection]]:
         """Await and return the list of sources."""
         return self.sources().__await__()
 
-    async def __aiter__(self) -> AsyncIterator[DataflowSource]:
+    async def __aiter__(self) -> AsyncIterator[PowerQuerySection]:
         """Iterate asynchronously over sources."""
         for s in await self.sources():
             yield s
@@ -134,14 +148,29 @@ class PowerQueryParser:
     # -- parsing ---------------------------------------------------------------
 
     @classmethod
-    def _parse(cls, pq: str) -> list[DataflowSource]:
+    def _parse(
+        cls,
+        pq: str,
+        *,
+        workspace_id: str | None = None,
+        refreshable_type: str | None = None,
+        refreshable_id: str | None = None,
+    ) -> list[PowerQuerySection]:
         """Parse ``shared`` expressions from a Power Query document."""
-        sources: list[DataflowSource] = []
+        sources: list[PowerQuerySection] = []
         for m in cls._SHARED_RE.finditer(pq):
             name = cls._unescape_name(m.group(1))
             expression = m.group(2).strip()
             sources.append(
-                DataflowSource.model_validate({"name": name, "expression": expression})
+                PowerQuerySection.model_validate(
+                    {
+                        "name": name,
+                        "expression": expression,
+                        "workspace_id": workspace_id,
+                        "refreshable_type": refreshable_type,
+                        "refreshable_id": refreshable_id,
+                    }
+                )
             )
         return sources
 

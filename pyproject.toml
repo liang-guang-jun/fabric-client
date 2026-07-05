@@ -24,6 +24,7 @@ dev = [
     "pytest-asyncio>=1.4.0",
     "pytest-cov>=7.1.0",
     "python-dotenv>=1.2.2",
+    "pandas>=2.3.3",
 ]
 
 
@@ -70,6 +71,7 @@ strict = true
 warn_unused_configs = true
 show_error_codes = true
 enable_error_code = ["ignore-without-code", "redundant-expr", "truthy-bool"]
+disable_error_code = ["valid-type"]
 packages = ["fabric_client", "tests"]
 
 [tool.pytest.ini_options]

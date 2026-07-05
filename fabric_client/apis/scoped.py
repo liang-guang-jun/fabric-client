@@ -86,6 +86,10 @@ class _ScopedList:
             return self._cached
         raw = await self._list_raw()
         self._cached = [self._wrap(item) for item in raw]
+        # Inject workspace back-reference for lazy access
+        for obj in self._cached:
+            if hasattr(obj, "_workspace"):
+                obj._workspace = self._workspace
         return self._cached
 
     def __await__(self) -> Generator[Any, None, list[Any]]:

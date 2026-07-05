@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
-from fabric_client.services.power_query import DataflowSource, PowerQueryParser
+from fabric_client.services.power_query import PowerQueryParser, PowerQuerySection
+from fabric_client.services.scan import WorkspaceScanService
 
-__all__ = ["DataflowSource", "PowerQueryParser"]
+__all__ = [
+    "PowerQueryParser",
+    "PowerQuerySection",
+    "WorkspaceScanService",
+]

@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Awaitable, Callable
-from typing import TYPE_CHECKING, TypeVar
+from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Generator
+from typing import TYPE_CHECKING, Any, TypeVar
 
 if TYPE_CHECKING:
     from fabric_client.client import FabricClient
@@ -35,9 +35,7 @@ class LazyCollection[T]:
 
     async def _load(self) -> list[T]:
         """Fetch items from the API and cache them."""
-        raw_items = await self._fetcher(
-            *self._fetcher_args, **self._fetcher_kwargs
-        )
+        raw_items = await self._fetcher(*self._fetcher_args, **self._fetcher_kwargs)
         self._items = [self._factory(self._client, item) for item in raw_items]
         return self._items
 
@@ -69,3 +67,31 @@ class LazyCollection[T]:
         status = "loaded" if self._items is not None else "unloaded"
         count = len(self._items) if self._items is not None else "?"
         return f"<LazyCollection [{status}] count={count}>"
+
+
+class _AsyncListProxy[T]:
+    """Lightweight proxy that wraps an async fetcher with ``await`` / ``async for``.
+
+    Used internally for lazy properties like ``dataset.refreshes``
+    and ``dataflow.transactions``.
+    """
+
+    def __init__(
+        self,
+        fetcher: Callable[[], Coroutine[Any, Any, list[T]]],
+    ) -> None:
+        """Initialize with an async fetcher callable."""
+        self._fetcher = fetcher
+        self._cached: list[T] | None = None
+
+    async def _resolve(self) -> list[T]:
+        if self._cached is None:
+            self._cached = await self._fetcher()
+        return self._cached
+
+    def __await__(self) -> Generator[Any, None, list[T]]:
+        return self._resolve().__await__()
+
+    async def __aiter__(self) -> AsyncIterator[T]:
+        for item in await self._resolve():
+            yield item

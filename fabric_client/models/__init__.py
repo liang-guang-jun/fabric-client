@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from fabric_client.models.dataflow import Dataflow, DataflowModel
-from fabric_client.models.dataset import Dataset, DatasetModel
+from fabric_client.models.dataflow import Dataflow, DataflowModel, DataflowTransaction
+from fabric_client.models.dataset import Dataset, DatasetModel, DatasetRefresh
 from fabric_client.models.report import Report, ReportModel
 from fabric_client.models.semantic_model import (
     SemanticModel,
@@ -14,8 +14,10 @@ from fabric_client.models.workspace import Workspace, WorkspaceModel
 __all__ = [
     "Dataflow",
     "DataflowModel",
+    "DataflowTransaction",
     "Dataset",
     "DatasetModel",
+    "DatasetRefresh",
     "Report",
     "ReportModel",
     "SemanticModel",
