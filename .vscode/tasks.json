@@ -1,0 +1,85 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "check lint",
+            "type": "shell",
+            "command": "uv run ruff check --fix .",
+            "group": {
+                "kind": "test",
+                "isDefault": false
+            },
+            "problemMatcher": {
+                "owner": "ruff",
+                "pattern": [
+                    {
+                        "regexp": "^(.+):(\\d+):(\\d+):\\s+(\\w+)\\s+(.+)$",
+                        "file": 1,
+                        "line": 2,
+                        "column": 3,
+                        "code": 4,
+                        "message": 5
+                    }
+                ]
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "check type",
+            "type": "shell",
+            "command": "uv run mypy",
+            "group": {
+                "kind": "test",
+                "isDefault": false
+            },
+            "problemMatcher": {
+                "owner": "mypy",
+                "pattern": [
+                    {
+                        "regexp": "^(.+):(\\d+):\\s+(error|warning):\\s+(.+)\\s+\\[(.+)\\]$",
+                        "file": 1,
+                        "line": 2,
+                        "severity": 3,
+                        "message": 4,
+                        "code": 5
+                    }
+                ]
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "check tests",
+            "type": "shell",
+            "command": "uv run pytest",
+            "group": {
+                "kind": "test",
+                "isDefault": false
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        },
+        {
+            "label": "check all",
+            "type": "shell",
+            "command": "uv run ruff check --fix . && uv run mypy . && uv run pytest",
+            "group": {
+                "kind": "test",
+                "isDefault": true
+            },
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated"
+            }
+        }
+    ]
+}
