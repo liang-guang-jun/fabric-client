@@ -56,7 +56,7 @@ class Resource[M: pydantic.BaseModel]:
     @property
     def id(self) -> str:
         """The unique identifier of this resource."""
-        return cast(str, self._data["id"])
+        return cast(str, self._data.get("id") or self._data.get("objectId"))
 
     @property
     def raw(self) -> dict[str, Any]:
@@ -117,8 +117,6 @@ class Resource[M: pydantic.BaseModel]:
         raise NotImplementedError
 
     @classmethod
-    def _from_data(
-        cls: type[T], client: FabricClient, data: dict[str, Any]
-    ) -> T:
+    def _from_data(cls: type[T], client: FabricClient, data: dict[str, Any]) -> T:
         """Create a resource instance from raw API data."""
         return cls(client, data)

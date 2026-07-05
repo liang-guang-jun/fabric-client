@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from fabric_client.apis.dataflow import MergedDataflowsAPI
 from fabric_client.apis.fabric.items import ItemsAPI
 from fabric_client.apis.fabric.workspaces import WorkspacesAPI
-from fabric_client.apis.powerbi.dataflows import DataflowsAPI
 from fabric_client.apis.powerbi.datasets import DatasetsAPI
 from fabric_client.apis.powerbi.reports import ReportsAPI
 from fabric_client.auth.credentials import Credentials
@@ -73,7 +73,7 @@ class FabricClient:
         self._items: ItemsAPI | None = None
         self._datasets: DatasetsAPI | None = None
         self._reports: ReportsAPI | None = None
-        self._dataflows: DataflowsAPI | None = None
+        self._dataflows: MergedDataflowsAPI | None = None
 
         # HTTP transport (handles auth injection, retry, error mapping)
         self._http_session = HttpSession(
@@ -116,10 +116,10 @@ class FabricClient:
         return self._reports
 
     @property
-    def dataflows(self) -> DataflowsAPI:
-        """Access Power BI dataflow operations."""
+    def dataflows(self) -> MergedDataflowsAPI:
+        """Access merged dataflow operations (Power BI Gen1 + Fabric Gen2)."""
         if self._dataflows is None:
-            self._dataflows = DataflowsAPI(self)
+            self._dataflows = MergedDataflowsAPI(self)
         return self._dataflows
 
     # ------------------------------------------------------------------

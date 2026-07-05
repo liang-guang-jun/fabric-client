@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from collections.abc import AsyncIterator, Coroutine, Generator
 from typing import TYPE_CHECKING, Any
 
+from fabric_client.apis.dataflow import (
+    _inject_workspace_id,
+    _normalize_gen2,
+)
 from fabric_client.apis.powerbi.dataflows import DataflowsAPI
 from fabric_client.apis.powerbi.datasets import DatasetsAPI
 from fabric_client.apis.powerbi.reports import ReportsAPI
 from fabric_client.models.dataflow import Dataflow
 from fabric_client.models.dataset import Dataset
 from fabric_client.models.report import Report
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from fabric_client.models.workspace import Workspace
@@ -47,6 +54,14 @@ class _ScopedList:
     def __init__(self, workspace: Workspace) -> None:
         self._workspace = workspace
         self._cached: list[Any] | None = None
+
+    @property
+    def cached(self) -> list[Any] | None:
+        """Return the cached items, or None if not yet fetched.
+
+        Read-only — use ``await`` or ``async for`` to populate.
+        """
+        return self._cached
 
     @property
     def _client(self) -> Any:  # FabricClient  # noqa: ANN401
@@ -140,9 +155,7 @@ def _match_regex(item: Any, pattern: re.Pattern[str]) -> bool:  # noqa: ANN401
 class AwaitableList:
     """A lazy filtered list that supports ``await`` and ``async for``."""
 
-    def __init__(
-        self, coro: Coroutine[Any, Any, list[Any]], keyword: str
-    ) -> None:
+    def __init__(self, coro: Coroutine[Any, Any, list[Any]], keyword: str) -> None:
         """Initialize with a coroutine and keyword filter."""
         self._coro = coro
         self._keyword = keyword
@@ -227,7 +240,10 @@ class WorkspaceReports(_ScopedList):
 
 
 class WorkspaceDataflows(_ScopedList):
-    """Scoped Power BI dataflows collection under a workspace.
+    """Scoped Power BI + Fabric dataflows collection under a workspace.
+
+    Merges Gen1 (Power BI) and Gen2 (Fabric) dataflows, deduplicating
+    by id / objectId.
 
     Usage::
 
@@ -238,8 +254,31 @@ class WorkspaceDataflows(_ScopedList):
     """
 
     async def _list_raw(self) -> list[dict[str, object]]:
+        from fabric_client.apis.fabric.items import ItemsAPI
+
         api = DataflowsAPI(self._client)
-        return await api.list(group_id=self._group_id)
+        gen1 = await api.list(group_id=self._group_id)
+        _inject_workspace_id(gen1, self._group_id)
+        gen1_ids: set[str] = {str(d.get("objectId", "")) for d in gen1}
+        results: list[dict[str, object]] = list(gen1)
+
+        # Gen2 — Fabric items of type "Dataflow"
+        try:
+            items_api = ItemsAPI(self._client)
+            gen2 = await items_api.list(
+                workspace_id=self._group_id, item_type="Dataflow"
+            )
+            for item in gen2:
+                if str(item.get("id", "")) not in gen1_ids:
+                    results.append(_normalize_gen2(item))
+        except Exception:
+            logger.debug(
+                "Fabric Gen2 dataflow fetch failed for workspace %s",
+                self._group_id,
+                exc_info=True,
+            )
+
+        return results
 
     def _wrap(self, data: dict[str, object]) -> Dataflow:
         return Dataflow(self._client, data)

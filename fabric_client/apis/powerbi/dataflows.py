@@ -28,9 +28,7 @@ class DataflowsAPI:
         """List dataflows in a workspace (group)."""
         if group_id:
             endpoint = Endpoint("GET", "/groups/{groupId}/dataflows")
-            url = endpoint.build_url(
-                self._client.powerbi_base_url, groupId=group_id
-            )
+            url = endpoint.build_url(self._client.powerbi_base_url, groupId=group_id)
         else:
             url = f"{self._client.powerbi_base_url}/dataflows"
         response = await self._client._request("GET", url, params=params)
@@ -41,9 +39,7 @@ class DataflowsAPI:
     ) -> dict[str, object]:
         """Get a dataflow by ID."""
         if group_id:
-            endpoint = Endpoint(
-                "GET", "/groups/{groupId}/dataflows/{dataflowId}"
-            )
+            endpoint = Endpoint("GET", "/groups/{groupId}/dataflows/{dataflowId}")
             url = endpoint.build_url(
                 self._client.powerbi_base_url,
                 groupId=group_id,
@@ -51,13 +47,9 @@ class DataflowsAPI:
             )
         else:
             url = f"{self._client.powerbi_base_url}/dataflows/{dataflow_id}"
-        return cast(
-            "dict[str, object]", await self._client._request("GET", url)
-        )
+        return cast("dict[str, object]", await self._client._request("GET", url))
 
-    async def refresh(
-        self, dataflow_id: str, group_id: str | None = None
-    ) -> None:
+    async def refresh(self, dataflow_id: str, group_id: str | None = None) -> None:
         """Trigger a refresh of a dataflow."""
         if group_id:
             endpoint = Endpoint(
@@ -72,3 +64,12 @@ class DataflowsAPI:
         else:
             url = f"{self._client.powerbi_base_url}/dataflows/{dataflow_id}/refreshes"
         await self._client._request("POST", url)
+
+    async def export_definition(self, dataflow_id: str) -> dict[str, object]:
+        """Export the full definition of a Gen1 dataflow via the admin API.
+
+        Returns the complete JSON response.
+        """
+        url = f"{self._client.powerbi_base_url}/admin/dataflows/{dataflow_id}/export"
+        response = await self._client._request("GET", url)
+        return cast("dict[str, object]", response)

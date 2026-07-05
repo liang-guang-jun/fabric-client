@@ -28,9 +28,7 @@ class ItemsAPI:
     ) -> list[dict[str, object]]:
         """List items in a workspace, optionally filtered by type."""
         endpoint = Endpoint("GET", "/workspaces/{workspaceId}/items")
-        url = endpoint.build_url(
-            self._client.base_url, workspaceId=workspace_id
-        )
+        url = endpoint.build_url(self._client.base_url, workspaceId=workspace_id)
         if item_type:
             params["type"] = item_type
         response = await self._client._request("GET", url, params=params)
@@ -42,9 +40,7 @@ class ItemsAPI:
         url = endpoint.build_url(
             self._client.base_url, workspaceId=workspace_id, itemId=item_id
         )
-        return cast(
-            "dict[str, object]", await self._client._request("GET", url)
-        )
+        return cast("dict[str, object]", await self._client._request("GET", url))
 
     async def create(
         self,
@@ -55,9 +51,7 @@ class ItemsAPI:
     ) -> dict[str, object]:
         """Create a new item in a workspace."""
         endpoint = Endpoint("POST", "/workspaces/{workspaceId}/items")
-        url = endpoint.build_url(
-            self._client.base_url, workspaceId=workspace_id
-        )
+        url = endpoint.build_url(self._client.base_url, workspaceId=workspace_id)
         body: dict[str, Any] = {
             "displayName": display_name,
             "type": item_type,
@@ -76,9 +70,7 @@ class ItemsAPI:
         **updates: Any,  # noqa: ANN401
     ) -> dict[str, object]:
         """Update an existing item."""
-        endpoint = Endpoint(
-            "PATCH", "/workspaces/{workspaceId}/items/{itemId}"
-        )
+        endpoint = Endpoint("PATCH", "/workspaces/{workspaceId}/items/{itemId}")
         url = endpoint.build_url(
             self._client.base_url, workspaceId=workspace_id, itemId=item_id
         )
@@ -89,10 +81,24 @@ class ItemsAPI:
 
     async def delete(self, workspace_id: str, item_id: str) -> None:
         """Delete an item from a workspace."""
-        endpoint = Endpoint(
-            "DELETE", "/workspaces/{workspaceId}/items/{itemId}"
-        )
+        endpoint = Endpoint("DELETE", "/workspaces/{workspaceId}/items/{itemId}")
         url = endpoint.build_url(
             self._client.base_url, workspaceId=workspace_id, itemId=item_id
         )
         await self._client._request("DELETE", url)
+
+    async def get_definition(
+        self, workspace_id: str, item_id: str
+    ) -> dict[str, object]:
+        """Get the definition (parts) of a Fabric item (Gen2 dataflow, etc.)."""
+        endpoint = Endpoint(
+            "POST",
+            "/workspaces/{workspaceId}/items/{itemId}/getDefinition",
+        )
+        url = endpoint.build_url(
+            self._client.base_url, workspaceId=workspace_id, itemId=item_id
+        )
+        return cast(
+            "dict[str, object]",
+            await self._client._request("POST", url),
+        )
