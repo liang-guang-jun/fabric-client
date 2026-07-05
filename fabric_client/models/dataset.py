@@ -128,13 +128,17 @@ class Dataset(Resource[DatasetModel]):
 
     @property
     def refreshes(self) -> _AsyncListProxy[DatasetRefresh]:
-        """List refresh history for this dataset (``await`` or ``async for``).
+        """List refresh history (``await`` or ``async for``).
 
-        Usage::
-
-            refs = await ds.refreshes          # list[DatasetRefresh]
-            async for r in ds.refreshes: ...    # iterate
+        Returns empty for non-refreshable datasets (e.g. usage metrics).
         """
+        if not self.pydantic.is_refreshable:
+
+            async def _empty() -> list[DatasetRefresh]:
+                return []
+
+            return _AsyncListProxy(_empty)
+
         from fabric_client.apis.powerbi.datasets import DatasetsAPI
 
         api = DatasetsAPI(self._client)
