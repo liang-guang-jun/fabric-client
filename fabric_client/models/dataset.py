@@ -114,17 +114,25 @@ class Dataset(Resource[DatasetModel]):
         Returns:
             Refresh list if ``wait=True``, else ``None``.
         """
+        self._logger.info(
+            "Triggering dataset refresh id=%s force=%s wait=%s",
+            self.id,
+            force,
+            wait,
+        )
         from fabric_client.apis.powerbi.datasets import DatasetsAPI
 
         api = DatasetsAPI(self._client)
         ws_id = self.workspace.id if self.workspace else None
-        return await api.refresh(
+        result = await api.refresh(
             self.id,
             group_id=ws_id,
             force=force,
             wait=wait,
             timeout=timeout,
         )
+        self._logger.info("Dataset refresh completed id=%s", self.id)
+        return result
 
     @property
     def refreshes(self) -> _AsyncListProxy[DatasetRefresh]:

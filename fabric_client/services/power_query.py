@@ -55,6 +55,7 @@ class PowerQueryParser:
     def __init__(self, dataflow: Dataflow) -> None:
         """Initialize with the target dataflow."""
         self._df = dataflow
+        self._logger = dataflow._client._logger_factory.get_logger(__name__)
         self._sources: list[PowerQuerySection] | None = None
 
     # -- public API ------------------------------------------------------------
@@ -62,8 +63,18 @@ class PowerQueryParser:
     async def sources(self) -> list[PowerQuerySection]:
         """Fetch and parse sources (cached after first call)."""
         if self._sources is not None:
+            self._logger.debug(
+                "Returning cached PowerQuery sources for dataflow=%s (%d sections)",
+                self._df.id,
+                len(self._sources),
+            )
             return self._sources
         gen = self._df.pydantic.generation
+        self._logger.debug(
+            "Fetching PowerQuery for dataflow=%s generation=%d",
+            self._df.id,
+            gen,
+        )
         if gen == 1:
             pq = await self._fetch_gen1()
         elif gen == 2:

@@ -45,7 +45,13 @@ async def scan(
         return
 
     client: FabricClient = ws_list[0]._client
+    logger = client._logger_factory.get_logger(__name__)
     ws_ids = [ws.id for ws in ws_list]
+    logger.info(
+        "Starting scan for %d workspace(s): %s",
+        len(ws_ids),
+        ws_ids[:5] if len(ws_ids) <= 5 else [*ws_ids[:5], "…"],
+    )
     service = WorkspaceScanService(client)
     results = await service.scan(
         ws_ids,
@@ -58,6 +64,7 @@ async def scan(
     )
     scan_cache: dict[str, WorkspaceScanResult] = {r.id: r for r in results}
 
+    logger.info("Scan completed: %d workspace(s) enriched", len(scan_cache))
     for ws in ws_list:
         ws._scan_cache = scan_cache  # type: ignore[attr-defined]
         yield ws
@@ -69,6 +76,7 @@ class WorkspaceScanService:
     def __init__(self, client: FabricClient) -> None:
         """Initialize with a client."""
         self._client = client
+        self._logger = client._logger_factory.get_logger(__name__)
 
     async def scan(
         self,
@@ -85,14 +93,19 @@ class WorkspaceScanService:
         if not workspace_ids:
             raise ValueError("workspace_ids must not be empty")
 
-        # Split into batches of up to 100
+        self._logger.info(
+            "Scanning %d workspace(s) in %d batch(es)",
+            len(workspace_ids),
+            (len(workspace_ids) + _SCAN_BATCH_SIZE - 1) // _SCAN_BATCH_SIZE,
+        )
+        _start = __import__("time").monotonic()
         batches = [
             workspace_ids[i : i + _SCAN_BATCH_SIZE]
             for i in range(0, len(workspace_ids), _SCAN_BATCH_SIZE)
         ]
 
         if len(batches) == 1:
-            return await self._scan_batch(
+            result = await self._scan_batch(
                 workspace_ids=batches[0],
                 lineage=lineage,
                 datasource_details=datasource_details,
@@ -101,6 +114,11 @@ class WorkspaceScanService:
                 get_artifact_users=get_artifact_users,
                 timeout=timeout,
             )
+            self._logger.info(
+                "Single-batch scan completed in %dms",
+                int((__import__("time").monotonic() - _start) * 1000),
+            )
+            return result
 
         # Parallel batches
         tasks = [
@@ -119,6 +137,12 @@ class WorkspaceScanService:
         merged: list[WorkspaceScanResult] = []
         for br in batch_results:
             merged.extend(br)
+        self._logger.info(
+            "Multi-batch scan (%d batches) completed in %dms, %d results",
+            len(batches),
+            int((__import__("time").monotonic() - _start) * 1000),
+            len(merged),
+        )
         return merged
 
     async def _scan_batch(

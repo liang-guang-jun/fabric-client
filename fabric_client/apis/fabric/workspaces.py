@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import logging
+import time
 from collections.abc import AsyncIterator, Generator
 from typing import TYPE_CHECKING, Any, cast
 
@@ -13,8 +13,6 @@ from fabric_client.models.workspace import Workspace
 
 if TYPE_CHECKING:
     from fabric_client.client import FabricClient
-
-logger = logging.getLogger(__name__)
 
 
 class WorkspacesAPI:
@@ -33,13 +31,22 @@ class WorkspacesAPI:
     def __init__(self, client: FabricClient) -> None:
         """Initialize the Workspaces API client."""
         self._client = client
+        self._logger = client._logger_factory.get_logger(__name__)
 
     # -- protocol: await / async for ------------------------------------
 
     async def _resolve(self, **params: Any) -> list[Workspace]:  # noqa: ANN401
         """Resolve the default listing into a concrete list."""
+        self._logger.debug("Resolving workspace list (params=%s)", params)
+        _start = time.monotonic()
         collection = await self.list(**params)
-        return await collection.all()
+        result = await collection.all()
+        self._logger.debug(
+            "Resolved %d workspaces in %dms",
+            len(result),
+            int((time.monotonic() - _start) * 1000),
+        )
+        return result
 
     def __await__(self) -> Generator[Any, None, list[Workspace]]:
         """Await the default listing and return a concrete list."""
@@ -55,10 +62,13 @@ class WorkspacesAPI:
 
     async def get(self, workspace_id: str) -> Workspace:
         """Get a workspace by ID."""
+        self._logger.info("Fetching workspace id=%s", workspace_id)
         endpoint = Endpoint("GET", "/workspaces/{workspaceId}")
         url = endpoint.build_url(self._client.base_url, workspaceId=workspace_id)
         data = await self._client._request("GET", url)
-        return Workspace(self._client, data)
+        ws = Workspace(self._client, data)
+        self._logger.info("Fetched workspace id=%s name=%s", ws.id, ws.display_name)
+        return ws
 
     async def list(self, **params: Any) -> LazyCollection[Workspace]:  # noqa: ANN401
         """List workspaces accessible by the authenticated principal.
@@ -112,6 +122,7 @@ class WorkspacesAPI:
         capacity_id: str | None = None,
     ) -> Workspace:
         """Create a new workspace."""
+        self._logger.info("Creating workspace name=%s", name)
         endpoint = Endpoint("POST", "/workspaces")
         url = endpoint.build_url(self._client.base_url)
         body: dict[str, Any] = {
@@ -121,7 +132,9 @@ class WorkspacesAPI:
         if capacity_id:
             body["capacityId"] = capacity_id
         data = await self._client._request("POST", url, json=body)
-        return Workspace(self._client, data)
+        ws = Workspace(self._client, data)
+        self._logger.info("Created workspace id=%s name=%s", ws.id, ws.display_name)
+        return ws
 
     async def update(self, workspace_id: str, **updates: Any) -> Workspace:  # noqa: ANN401
         """Update an existing workspace."""
@@ -132,6 +145,8 @@ class WorkspacesAPI:
 
     async def delete(self, workspace_id: str) -> None:
         """Delete a workspace."""
+        self._logger.info("Deleting workspace id=%s", workspace_id)
         endpoint = Endpoint("DELETE", "/workspaces/{workspaceId}")
         url = endpoint.build_url(self._client.base_url, workspaceId=workspace_id)
         await self._client._request("DELETE", url)
+        self._logger.info("Deleted workspace id=%s", workspace_id)

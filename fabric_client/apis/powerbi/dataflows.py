@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from fabric_client.core.endpoint import Endpoint
@@ -12,8 +11,6 @@ from fabric_client.models.dataflow import DataflowTransaction
 if TYPE_CHECKING:
     from fabric_client.client import FabricClient
 
-logger = logging.getLogger(__name__)
-
 
 class DataflowsAPI:
     """API client for Power BI dataflow operations."""
@@ -21,6 +18,7 @@ class DataflowsAPI:
     def __init__(self, client: FabricClient) -> None:
         """Initialize the Dataflows API client."""
         self._client = client
+        self._logger = client._logger_factory.get_logger(__name__)
 
     async def list(
         self,

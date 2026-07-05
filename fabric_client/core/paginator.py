@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import AsyncIterator, Callable
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 T = TypeVar("T")
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from logging import Logger
 
 
 class Paginator(AsyncIterator[T]):
@@ -25,15 +25,27 @@ class Paginator(AsyncIterator[T]):
         continuation_key: str | None = "continuationToken",
         max_items: int | None = None,
         page_delay: float = 0.0,
+        logger: Logger | None = None,
         **params: Any,  # noqa: ANN401
     ) -> None:
-        """Initialize the paginator."""
+        """Initialize the paginator.
+
+        Args:
+            fetcher: Async callable that fetches a page of results.
+            items_key: JSON key for the items array (``value``).
+            continuation_key: JSON key for the continuation token.
+            max_items: Maximum total items to yield.
+            page_delay: Delay between pages (seconds).
+            logger: Optional logger for pagination diagnostics.
+            **params: Additional query parameters.
+        """
         self._fetcher = fetcher
         self._items_key = items_key
         self._continuation_key = continuation_key
         self._max_items = max_items
         self._page_delay = page_delay
         self._params = params
+        self._logger = logger
 
         self._current_page: list[T] = []
         self._page_index = 0
@@ -47,10 +59,7 @@ class Paginator(AsyncIterator[T]):
 
     async def __anext__(self) -> T:
         """Return the next item from the current page."""
-        if (
-            self._max_items is not None
-            and self._fetched_count >= self._max_items
-        ):
+        if self._max_items is not None and self._fetched_count >= self._max_items:
             raise StopAsyncIteration
 
         if self._page_index >= len(self._current_page):
@@ -65,14 +74,12 @@ class Paginator(AsyncIterator[T]):
 
     async def _fetch_next_page(self) -> None:
         """Fetch the next page of results."""
-        if (
-            self._page_delay > 0
-            and self._page_index == 0
-            and self._current_page
-        ):
-            logger.debug(
-                "Paginator: sleeping %.2fs before next page", self._page_delay
-            )
+        if self._page_delay > 0 and self._page_index == 0 and self._current_page:
+            if self._logger:
+                self._logger.debug(
+                    "Paginator: sleeping %.2fs before next page",
+                    self._page_delay,
+                )
             await asyncio.sleep(self._page_delay)
 
         params = {**self._params}
@@ -81,14 +88,31 @@ class Paginator(AsyncIterator[T]):
 
         response = await self._fetcher(**params)
         self._current_page = response.get(self._items_key, [])
+        page_num = self._fetched_count // max(len(self._current_page or [1]), 1) + 1
+
+        if self._logger:
+            self._logger.debug(
+                "Paginator: page %d returned %d items",
+                page_num,
+                len(self._current_page),
+            )
 
         self._continuation_token = None
         if self._continuation_key:
             self._continuation_token = response.get(self._continuation_key)
+            if self._logger and self._continuation_token:
+                self._logger.debug(
+                    "Paginator: continuation token present, more pages available",
+                )
 
         self._page_index = 0
         if not self._current_page:
             self._exhausted = True
+            if self._logger:
+                self._logger.debug(
+                    "Paginator: exhausted after %d items",
+                    self._fetched_count,
+                )
 
     async def collect_all(self) -> list[T]:
         """Fetch all pages and return a single list."""

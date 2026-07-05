@@ -86,17 +86,25 @@ class Dataflow(Resource[DataflowModel]):
         Returns:
             Transaction list if ``wait=True``, else ``None``.
         """
+        self._logger.info(
+            "Triggering dataflow refresh id=%s force=%s wait=%s",
+            self.id,
+            force,
+            wait,
+        )
         from fabric_client.apis.powerbi.dataflows import DataflowsAPI
 
         api = DataflowsAPI(self._client)
         ws_id = self.pydantic.workspace_id
-        return await api.refresh(
+        result = await api.refresh(
             self.id,
             group_id=ws_id,
             force=force,
             wait=wait,
             timeout=timeout,
         )
+        self._logger.info("Dataflow refresh completed id=%s", self.id)
+        return result
 
     @property
     def transactions(self) -> _AsyncListProxy[DataflowTransaction]:

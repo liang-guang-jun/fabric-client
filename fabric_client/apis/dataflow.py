@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any
 
 from fabric_client.apis.fabric.items import ItemsAPI
@@ -10,8 +9,6 @@ from fabric_client.apis.powerbi.dataflows import DataflowsAPI
 
 if TYPE_CHECKING:
     from fabric_client.client import FabricClient
-
-logger = logging.getLogger(__name__)
 
 
 def _normalize_gen2(item: dict[str, object]) -> dict[str, object]:
@@ -51,6 +48,7 @@ class MergedDataflowsAPI:
     def __init__(self, client: FabricClient) -> None:
         """Initialize with the shared client."""
         self._client = client
+        self._logger = client._logger_factory.get_logger(__name__)
         self._pbi = DataflowsAPI(client)
         self._fabric_items = ItemsAPI(client)
 
@@ -84,7 +82,7 @@ class MergedDataflowsAPI:
                     if str(item.get("id", "")) not in gen1_ids:
                         results.append(_normalize_gen2(item))
             except Exception:
-                logger.debug(
+                self._logger.debug(
                     "Fabric Gen2 dataflow fetch failed for workspace %s",
                     group_id,
                     exc_info=True,

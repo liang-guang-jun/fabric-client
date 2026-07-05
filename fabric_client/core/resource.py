@@ -45,6 +45,7 @@ class Resource[M: pydantic.BaseModel]:
         self._pydantic: M | None = None
         # Back-reference to parent workspace (set by scoped collections)
         self._workspace: Resource[Any] | None = None
+        self._logger = client._logger_factory.get_logger(__name__)
 
     @property
     def workspace(self) -> Resource[Any] | None:

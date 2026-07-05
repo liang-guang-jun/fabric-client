@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING, Any, cast
 
 from fabric_client.core.endpoint import Endpoint
 
 if TYPE_CHECKING:
     from fabric_client.client import FabricClient
-
-logger = logging.getLogger(__name__)
 
 
 class ItemsAPI:
@@ -19,6 +16,7 @@ class ItemsAPI:
     def __init__(self, client: FabricClient) -> None:
         """Initialize the Items API client."""
         self._client = client
+        self._logger = client._logger_factory.get_logger(__name__)
 
     async def list(
         self,
@@ -27,6 +25,11 @@ class ItemsAPI:
         **params: Any,  # noqa: ANN401
     ) -> list[dict[str, object]]:
         """List items in a workspace, optionally filtered by type."""
+        self._logger.debug(
+            "Listing items in workspace=%s type=%s",
+            workspace_id,
+            item_type,
+        )
         endpoint = Endpoint("GET", "/workspaces/{workspaceId}/items")
         url = endpoint.build_url(self._client.base_url, workspaceId=workspace_id)
         if item_type:

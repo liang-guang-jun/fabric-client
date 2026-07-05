@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import logging
 import random
 import re
-from typing import Any
+import time
+from typing import TYPE_CHECKING, Any
 
 import tenacity
 
@@ -22,7 +22,8 @@ from fabric_client.exceptions import (
 )
 from fabric_client.session import Session
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from fabric_client.logging.factory import LoggerFactory
 
 
 class HttpSession:
@@ -39,12 +40,27 @@ class HttpSession:
         http_client: AsyncHttpClient | None = None,
         timeout: float = DEFAULT_TIMEOUT,
         max_retries: int = 3,
+        logger_factory: LoggerFactory | None = None,
     ) -> None:
-        """Initialize the HTTP session."""
+        """Initialize the HTTP session.
+
+        Args:
+            session: Auth session providing bearer tokens.
+            http_client: Pluggable HTTP backend (defaults to aiohttp).
+            timeout: Default request timeout in seconds.
+            max_retries: Maximum retry attempts for transient errors.
+            logger_factory: Shared logger factory.
+        """
+        from fabric_client.logging.factory import LoggerFactory as _LF  # noqa: N814
+
         self._session = session
         self._timeout = timeout
         self._max_retries = max_retries
         self._http: AsyncHttpClient | None = http_client
+
+        # Logging
+        _factory = logger_factory or _LF.default()
+        self._logger = _factory.get_logger(__name__)
 
     # ------------------------------------------------------------------
     # Backend
@@ -56,7 +72,19 @@ class HttpSession:
             from fabric_client.core.http_aiohttp import AioHttpClient
 
             self._http = AioHttpClient()
+            self._logger.debug("Created default AioHttpClient backend")
         return self._http
+
+    @property
+    def logger_factory(self) -> LoggerFactory:
+        """The shared logger factory (for sub-components that need it)."""
+        from fabric_client.logging.factory import (
+            LoggerFactory as _LF,  # noqa: N814  # noqa: N814
+        )
+
+        factory = _LF.default()
+        # Walk cached loggers to recover the factory (simplified)
+        return factory
 
     # ------------------------------------------------------------------
     # Public API
@@ -73,15 +101,25 @@ class HttpSession:
         **kwargs: Any,  # noqa: ANN401
     ) -> Any:  # noqa: ANN401
         """Perform an authenticated HTTP request with retry and error mapping."""
+        _start = time.monotonic()
         auth_header = await self._session.get_authorization_header()
         merged_headers = {**auth_header, **(headers or {})}
         http = await self._ensure_http()
+
+        # Log outgoing request (omit sensitive auth header)
+        self._logger.debug(
+            "%s %s | params=%s body=%s",
+            method,
+            url,
+            params or {},
+            _truncate_body(json),
+        )
 
         retrier = tenacity.AsyncRetrying(
             retry=self._retry_predicate,
             stop=tenacity.stop_after_attempt(self._max_retries),
             wait=self._compute_wait,
-            before_sleep=tenacity.before_sleep_log(logger, logging.WARNING),
+            before_sleep=self._before_retry_sleep,
             reraise=True,
         )
 
@@ -95,9 +133,31 @@ class HttpSession:
                     headers=merged_headers,
                     timeout=self._timeout,
                 )
+                elapsed = (time.monotonic() - _start) * 1000
+                self._logger.debug(
+                    "%s %s → %d (%dms)",
+                    method,
+                    url,
+                    response.status_code,
+                    int(elapsed),
+                )
                 return self._handle_response(response)
 
         raise FabricClientError("Request failed")
+
+    def _before_retry_sleep(self, retry_state: tenacity.RetryCallState) -> None:
+        """Log retry details before sleeping."""
+        exc = retry_state.outcome.exception() if retry_state.outcome else None
+        attempt = retry_state.attempt_number
+        wait = self._compute_wait(retry_state)
+        self._logger.warning(
+            "Retry attempt %d/%d after %.1fs — %s: %s",
+            attempt,
+            self._max_retries,
+            wait,
+            type(exc).__name__ if exc else "unknown",
+            str(exc)[:120] if exc else "",
+        )
 
     # ------------------------------------------------------------------
     # Response handling
@@ -115,9 +175,7 @@ class HttpSession:
 
         try:
             error_body = response.json()
-            error_msg = error_body.get("error", {}).get(
-                "message", response.text()
-            )
+            error_msg = error_body.get("error", {}).get("message", response.text())
         except Exception:
             error_msg = response.text()
 
@@ -181,9 +239,7 @@ class HttpSession:
             try:
                 from datetime import UTC, datetime
 
-                dt = datetime.strptime(
-                    match.group(1).strip(), "%m/%d/%Y %I:%M:%S %p"
-                )
+                dt = datetime.strptime(match.group(1).strip(), "%m/%d/%Y %I:%M:%S %p")
                 dt = dt.replace(tzinfo=UTC)
                 delay = (dt - datetime.now(UTC)).total_seconds()
                 return max(delay, 1.0)
@@ -198,5 +254,21 @@ class HttpSession:
     async def close(self) -> None:
         """Close the underlying HTTP backend."""
         if self._http is not None:
+            self._logger.debug("Closing HTTP backend")
             await self._http.close()
             self._http = None
+
+
+# ------------------------------------------------------------------
+# Module helpers
+# ------------------------------------------------------------------
+
+
+def _truncate_body(body: object, max_len: int = 500) -> str:
+    """Return a string representation of *body*, truncated to *max_len*."""
+    if body is None:
+        return "{}"
+    s = str(body)
+    if len(s) > max_len:
+        return s[:max_len] + "…"
+    return s

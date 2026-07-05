@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import logging
 import re
+import time
 from collections.abc import AsyncIterator, Coroutine, Generator
 from typing import TYPE_CHECKING, Any
 
@@ -17,8 +17,6 @@ from fabric_client.apis.powerbi.reports import ReportsAPI
 from fabric_client.models.dataflow import Dataflow
 from fabric_client.models.dataset import Dataset
 from fabric_client.models.report import Report
-
-logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from fabric_client.models.workspace import Workspace
@@ -54,6 +52,12 @@ class _ScopedList:
     def __init__(self, workspace: Workspace) -> None:
         self._workspace = workspace
         self._cached: list[Any] | None = None
+        self._logger = workspace._client._logger_factory.get_logger(__name__)
+
+    @property
+    def _resource_name(self) -> str:
+        """Human-readable name for this resource type (e.g. 'datasets')."""
+        return type(self).__name__.removeprefix("Workspace").lower()
 
     @property
     def cached(self) -> list[Any] | None:
@@ -83,13 +87,29 @@ class _ScopedList:
 
     async def _resolve(self) -> list[Any]:
         if self._cached is not None:
+            self._logger.debug(
+                "Returning cached scoped list (%d items)",
+                len(self._cached),
+            )
             return self._cached
+        self._logger.info(
+            "Fetching scoped %s for workspace=%s",
+            self._resource_name,
+            self._group_id,
+        )
+        _start = time.monotonic()
         raw = await self._list_raw()
         self._cached = [self._wrap(item) for item in raw]
         # Inject workspace back-reference for lazy access
         for obj in self._cached:
             if hasattr(obj, "_workspace"):
                 obj._workspace = self._workspace
+        self._logger.info(
+            "Fetched %d %s in %dms",
+            len(self._cached),
+            self._resource_name,
+            int((time.monotonic() - _start) * 1000),
+        )
         return self._cached
 
     def __await__(self) -> Generator[Any, None, list[Any]]:
@@ -276,7 +296,7 @@ class WorkspaceDataflows(_ScopedList):
                 if str(item.get("id", "")) not in gen1_ids:
                     results.append(_normalize_gen2(item))
         except Exception:
-            logger.debug(
+            self._logger.debug(
                 "Fabric Gen2 dataflow fetch failed for workspace %s",
                 self._group_id,
                 exc_info=True,

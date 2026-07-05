@@ -81,10 +81,19 @@ class Workspace(Resource[WorkspaceModel]):
         Subsequent ``await ws.datasets`` / ``async for`` calls return
         immediately from cache.
         """
+        self._logger.info("Prefetching scoped collections for workspace=%s", self.id)
+        import time as _time
+
+        _start = _time.monotonic()
         await asyncio.gather(
             self.datasets._resolve(),
             self.reports._resolve(),
             self.dataflows._resolve(),
+        )
+        self._logger.debug(
+            "Prefetched workspace=%s scoped collections in %dms",
+            self.id,
+            int((_time.monotonic() - _start) * 1000),
         )
 
     # -- scan --------------------------------------------------------------
@@ -95,9 +104,9 @@ class Workspace(Resource[WorkspaceModel]):
         cache: dict[str, WorkspaceScanResult] = getattr(self, "_scan_cache", {})
         result = cache.get(self.id)
         if result is None:
-            raise RuntimeError(
-                "No scan result. Iterate via client.workspaces.scanned first."
-            )
+            self._logger.warning("No scan result for workspace=%s", self.id)
+            raise RuntimeError("No scan result. Iterate via scan() first.")
+        self._logger.debug("Returning cached scan result for workspace=%s", self.id)
         return result
 
     # -- lifecycle ---------------------------------------------------------

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable, Coroutine, Generator
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -32,11 +33,19 @@ class LazyCollection[T]:
         self._fetcher_args = fetcher_args
         self._fetcher_kwargs = fetcher_kwargs or {}
         self._items: list[T] | None = None
+        self._logger = client._logger_factory.get_logger(__name__)
 
     async def _load(self) -> list[T]:
         """Fetch items from the API and cache them."""
+        self._logger.info("Loading lazy collection (cache miss)")
+        _start = time.monotonic()
         raw_items = await self._fetcher(*self._fetcher_args, **self._fetcher_kwargs)
         self._items = [self._factory(self._client, item) for item in raw_items]
+        self._logger.info(
+            "Loaded %d items in %dms",
+            len(self._items),
+            int((time.monotonic() - _start) * 1000),
+        )
         return self._items
 
     async def all(self) -> list[T]:
