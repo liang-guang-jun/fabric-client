@@ -6,7 +6,11 @@ import asyncio
 from typing import TYPE_CHECKING, Any, cast
 
 from fabric_client.core.endpoint import Endpoint
-from fabric_client.models.dataset import DatasetRefresh, RefreshSchedule
+from fabric_client.models.dataset import (
+    DatasetParameter,
+    DatasetRefresh,
+    RefreshSchedule,
+)
 
 if TYPE_CHECKING:
     from fabric_client.client import FabricClient
@@ -182,6 +186,33 @@ class DatasetsAPI:
         )
         data: dict[str, object] = await self._client._request("GET", url)
         return RefreshSchedule.model_validate(data)
+
+    async def get_parameters(
+        self,
+        dataset_id: str,
+        *,
+        group_id: str = "",
+    ) -> list[DatasetParameter]:
+        """Return the mashup parameters for a dataset.
+
+        API docs:
+        https://learn.microsoft.com/rest/api/power-bi/datasets/get-parameters-in-group
+        """
+        endpoint = Endpoint(
+            "GET",
+            "/groups/{groupId}/datasets/{datasetId}/parameters",
+        )
+        url = endpoint.build_url(
+            self._client.powerbi_base_url,
+            groupId=group_id,
+            datasetId=dataset_id,
+        )
+        data: dict[str, object] = await self._client._request("GET", url)
+        raw: list[dict[str, object]] = cast(
+            "list[dict[str, object]]",
+            data.get("value", []),
+        )
+        return [DatasetParameter.model_validate(p) for p in raw]
 
     # -- refresh helpers ------------------------------------------------------
 

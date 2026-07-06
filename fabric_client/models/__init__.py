@@ -6,6 +6,7 @@ from fabric_client.models.dataflow import Dataflow, DataflowModel, DataflowTrans
 from fabric_client.models.dataset import (
     Dataset,
     DatasetModel,
+    DatasetParameter,
     DatasetRefresh,
     RefreshSchedule,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "DataflowTransaction",
     "Dataset",
     "DatasetModel",
+    "DatasetParameter",
     "DatasetRefresh",
     "RefreshSchedule",
     "Report",

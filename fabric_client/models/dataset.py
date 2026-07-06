@@ -90,6 +90,24 @@ class RefreshSchedule(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(populate_by_name=True)
 
 
+class DatasetParameter(pydantic.BaseModel):
+    """A single dataset parameter (mashup parameter)."""
+
+    name: str = ""
+    type: str = ""
+    is_required: bool = pydantic.Field(default=False, alias="isRequired")
+    current_value: str | None = pydantic.Field(
+        default=None,
+        alias="currentValue",
+    )
+    suggested_values: list[str] = pydantic.Field(
+        default_factory=list,
+        alias="suggestedValues",
+    )
+
+    model_config = pydantic.ConfigDict(populate_by_name=True)
+
+
 class Dataset(Resource[DatasetModel]):
     """Represents a Power BI / Fabric dataset (semantic model storage).
 
@@ -140,6 +158,19 @@ class Dataset(Resource[DatasetModel]):
         async def _fetch() -> list[RefreshSchedule]:
             s = await api.get_refresh_schedule(self.id, group_id=ws_id)
             return [s]
+
+        return _AsyncListProxy(_fetch)
+
+    @property
+    def parameters(self) -> _AsyncListProxy[DatasetParameter]:
+        """Dataset mashup parameters (``await`` or ``async for``)."""
+        from fabric_client.apis.powerbi.datasets import DatasetsAPI
+
+        api = DatasetsAPI(self._client)
+        ws_id = self.workspace.id if self.workspace else ""
+
+        async def _fetch() -> list[DatasetParameter]:
+            return await api.get_parameters(self.id, group_id=ws_id)
 
         return _AsyncListProxy(_fetch)
 
