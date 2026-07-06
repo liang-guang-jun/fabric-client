@@ -11,6 +11,9 @@ POWERBI_API_BASE = "https://api.powerbi.com/v1.0/myorg"
 # Default request timeout in seconds
 DEFAULT_TIMEOUT = 120
 
+# Default http 409 max retry times
+DEFAULT_HTTP_MAX_RETRIES = 10
+
 # Maximum page size for list APIs
 MAX_PAGE_SIZE = 5000
 

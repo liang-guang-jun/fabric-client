@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 
 from fabric_client.core.endpoint import Endpoint
+from fabric_client.models.report import ReportPage
 
 if TYPE_CHECKING:
     from fabric_client.client import FabricClient
@@ -67,3 +68,30 @@ class ReportsAPI:
             bytes,
             await self._client._request("POST", url, json={"format": file_format}),
         )
+
+    async def get_pages(
+        self,
+        report_id: str,
+        *,
+        group_id: str = "",
+    ) -> list[ReportPage]:
+        """Return the pages of a report.
+
+        API docs:
+        https://learn.microsoft.com/rest/api/power-bi/reports/get-pages-in-group
+        """
+        endpoint = Endpoint(
+            "GET",
+            "/groups/{groupId}/reports/{reportId}/pages",
+        )
+        url = endpoint.build_url(
+            self._client.powerbi_base_url,
+            groupId=group_id,
+            reportId=report_id,
+        )
+        data: dict[str, object] = await self._client._request("GET", url)
+        raw_pages: list[dict[str, object]] = cast(
+            "list[dict[str, object]]",
+            data.get("value", []),
+        )
+        return [ReportPage.model_validate(p) for p in raw_pages]

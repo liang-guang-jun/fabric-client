@@ -11,6 +11,7 @@ from fabric_client.apis.powerbi.datasets import DatasetsAPI
 from fabric_client.apis.powerbi.reports import ReportsAPI
 from fabric_client.auth.credentials import Credentials
 from fabric_client.constants import (
+    DEFAULT_HTTP_MAX_RETRIES,
     DEFAULT_TIMEOUT,
     FABRIC_API_BASE,
     POWERBI_API_BASE,
@@ -51,7 +52,7 @@ class FabricClient:
         base_url: str = FABRIC_API_BASE,
         powerbi_base_url: str = POWERBI_API_BASE,
         timeout: float = DEFAULT_TIMEOUT,
-        max_retries: int = 3,
+        max_retries: int = DEFAULT_HTTP_MAX_RETRIES,
         http_client: AsyncHttpClient | None = None,
         http_session: HttpSession | None = None,
         logger_factory: LoggerFactory | None = None,

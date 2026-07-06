@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any
 
 import tenacity
 
-from fabric_client.constants import DEFAULT_TIMEOUT
+from fabric_client.constants import DEFAULT_HTTP_MAX_RETRIES, DEFAULT_TIMEOUT
 from fabric_client.core.http import AsyncHttpClient, HttpResponse
 from fabric_client.exceptions import (
     APIError,
@@ -39,7 +39,7 @@ class HttpSession:
         *,
         http_client: AsyncHttpClient | None = None,
         timeout: float = DEFAULT_TIMEOUT,
-        max_retries: int = 3,
+        max_retries: int = DEFAULT_HTTP_MAX_RETRIES,
         logger_factory: LoggerFactory | None = None,
     ) -> None:
         """Initialize the HTTP session.

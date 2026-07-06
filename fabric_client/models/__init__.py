@@ -9,7 +9,7 @@ from fabric_client.models.dataset import (
     DatasetRefresh,
     RefreshSchedule,
 )
-from fabric_client.models.report import Report, ReportModel
+from fabric_client.models.report import Report, ReportModel, ReportPage
 from fabric_client.models.semantic_model import (
     SemanticModel,
     SemanticModelModel,
@@ -26,6 +26,7 @@ __all__ = [
     "RefreshSchedule",
     "Report",
     "ReportModel",
+    "ReportPage",
     "SemanticModel",
     "SemanticModelModel",
     "Workspace",
