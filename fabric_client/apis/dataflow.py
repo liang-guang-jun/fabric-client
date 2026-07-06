@@ -9,6 +9,7 @@ from fabric_client.apis.powerbi.dataflows import DataflowsAPI
 
 if TYPE_CHECKING:
     from fabric_client.client import FabricClient
+    from fabric_client.services.power_query import PowerQuerySection
 
 
 def _normalize_gen2(item: dict[str, object]) -> dict[str, object]:
@@ -89,3 +90,12 @@ class MergedDataflowsAPI:
                 )
 
         return results
+
+    async def get_queries(
+        self,
+        dataflow_id: str,
+        *,
+        group_id: str = "",
+    ) -> list[PowerQuerySection]:
+        """Return Power Query expressions for a dataflow."""
+        return await self._pbi.get_queries(dataflow_id, group_id=group_id)

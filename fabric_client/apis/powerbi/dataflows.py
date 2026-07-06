@@ -10,6 +10,7 @@ from fabric_client.models.dataflow import DataflowTransaction
 
 if TYPE_CHECKING:
     from fabric_client.client import FabricClient
+    from fabric_client.services.power_query import PowerQuerySection
 
 
 class DataflowsAPI:
@@ -147,6 +148,19 @@ class DataflowsAPI:
             transactionId=transaction_id,
         )
         await self._client._request("POST", url)
+
+    async def get_queries(
+        self,
+        dataflow_id: str,
+        *,
+        group_id: str = "",
+    ) -> list[PowerQuerySection]:
+        """Return Power Query expressions for a dataflow."""
+        from fabric_client.models.dataflow import Dataflow
+
+        raw = {"id": dataflow_id, "workspaceId": group_id}
+        df = Dataflow(self._client, raw)
+        return await df.queries.sources()
 
     # -- transaction helpers --------------------------------------------------
 

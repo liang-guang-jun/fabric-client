@@ -14,6 +14,25 @@ from fabric_client.models.dataset import (
 
 if TYPE_CHECKING:
     from fabric_client.client import FabricClient
+    from fabric_client.models.scan import ScanDataset, ScanTable
+    from fabric_client.services.power_query import PowerQuerySection
+
+
+def _find_scan_dataset(
+    client: FabricClient,
+    group_id: str,
+    dataset_id: str,
+) -> ScanDataset | None:
+    """Look up a dataset in the client's scan cache by workspace ID."""
+    from fabric_client.models.scan import WorkspaceScanResult
+
+    ws_result: WorkspaceScanResult | None = client._scan_cache.get(group_id)
+    if ws_result is None:
+        return None
+    for ds in ws_result.datasets:
+        if ds.id == dataset_id:
+            return ds
+    return None
 
 
 class DatasetsAPI:
@@ -213,6 +232,50 @@ class DatasetsAPI:
             data.get("value", []),
         )
         return [DatasetParameter.model_validate(p) for p in raw]
+
+    # -- scan-derived helpers ------------------------------------------------
+
+    async def get_tables(
+        self,
+        dataset_id: str,
+        *,
+        group_id: str = "",
+    ) -> list[ScanTable]:
+        """Return dataset tables from the (cached) admin scan.
+
+        Requires ``scan()`` to have run first.
+        """
+        scan_ds = _find_scan_dataset(self._client, group_id, dataset_id)
+        return list(scan_ds.tables) if scan_ds else []
+
+    async def get_queries(
+        self,
+        dataset_id: str,
+        *,
+        group_id: str = "",
+    ) -> list[PowerQuerySection]:
+        """Return dataset Power Query expressions from the (cached) admin scan.
+
+        Requires ``scan()`` to have run first.
+        """
+        from fabric_client.services.power_query import PowerQuerySection
+
+        scan_ds = _find_scan_dataset(self._client, group_id, dataset_id)
+        if scan_ds is None:
+            return []
+        result: list[PowerQuerySection] = []
+        for table in scan_ds.tables:
+            if table.source:
+                result.append(
+                    PowerQuerySection(
+                        name=table.name,
+                        expression=table.source[0].expression,
+                        workspace_id=group_id,
+                        refreshable_type="dataset",
+                        refreshable_id=dataset_id,
+                    )
+                )
+        return result
 
     # -- refresh helpers ------------------------------------------------------
 
