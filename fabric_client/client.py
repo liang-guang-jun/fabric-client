@@ -91,6 +91,13 @@ class FabricClient:
         self.powerbi_base_url = powerbi_base_url
         self._cache: Cache[Any] = Cache(logger_factory=self._logger_factory)
 
+        # Scan result cache (keyed by workspace ID, TTL = 5 min)
+        self._scan_cache: Cache[Any] = Cache(
+            maxsize=1024,
+            default_ttl=300.0,
+            logger_factory=self._logger_factory,
+        )
+
         # Lazy-initialized API sub-clients
         self._workspaces: WorkspacesAPI | None = None
         self._items: ItemsAPI | None = None

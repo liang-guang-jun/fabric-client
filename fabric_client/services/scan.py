@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections.abc import AsyncIterator, Iterable
 from typing import TYPE_CHECKING, Any
 
@@ -12,8 +11,6 @@ from fabric_client.models.workspace import Workspace
 
 if TYPE_CHECKING:
     from fabric_client.client import FabricClient
-
-logger = logging.getLogger(__name__)
 
 _SCAN_BATCH_SIZE = 100
 
@@ -27,18 +24,21 @@ async def scan(
     dataset_expressions: bool = True,
     get_artifact_users: bool = True,
     timeout: int = 7200,
+    scan_ttl: float | None = 300.0,
 ) -> AsyncIterator[Workspace]:
     """Scan workspaces and yield them with ``.scanned`` data injected.
+
+    Results are cached on the client keyed by workspace ID.  Subsequent
+    calls skip the API for cached workspaces (until *scan_ttl* expires).
 
     Usage::
 
         async for ws in scan(await client.workspaces):
             print(ws.scanned.state)
 
-        # Or with a filtered subset
-        filtered = [w for w in await client.workspaces if "Prod" in w.display_name]
-        async for ws in scan(filtered):
-            print(ws.scanned.dataflows)
+        # Force re-scan
+        async for ws in scan(workspaces, scan_ttl=0):
+            ...
     """
     ws_list = list(workspaces)
     if not ws_list:
@@ -46,27 +46,50 @@ async def scan(
 
     client: FabricClient = ws_list[0]._client
     logger = client._logger_factory.get_logger(__name__)
-    ws_ids = [ws.id for ws in ws_list]
-    logger.info(
-        "Starting scan for %d workspace(s): %s",
-        len(ws_ids),
-        ws_ids[:5] if len(ws_ids) <= 5 else [*ws_ids[:5], "…"],
-    )
-    service = WorkspaceScanService(client)
-    results = await service.scan(
-        ws_ids,
-        lineage=lineage,
-        datasource_details=datasource_details,
-        dataset_schema=dataset_schema,
-        dataset_expressions=dataset_expressions,
-        get_artifact_users=get_artifact_users,
-        timeout=timeout,
-    )
-    scan_cache: dict[str, WorkspaceScanResult] = {r.id: r for r in results}
 
-    logger.info("Scan completed: %d workspace(s) enriched", len(scan_cache))
+    # Split into cached (fresh) and uncached (need API call)
+    cached: dict[str, WorkspaceScanResult] = {}
+    uncached: list[str] = []
     for ws in ws_list:
-        ws._scan_cache = scan_cache  # type: ignore[attr-defined]
+        entry: WorkspaceScanResult | None = client._scan_cache.get(ws.id)
+        if entry is not None:
+            cached[ws.id] = entry
+        else:
+            uncached.append(ws.id)
+
+    if uncached:
+        logger.info(
+            "Starting scan for %d workspace(s) (%d cached, %d uncached): %s",
+            len(ws_list),
+            len(cached),
+            len(uncached),
+            uncached[:5] if len(uncached) <= 5 else [*uncached[:5], "…"],
+        )
+        service = WorkspaceScanService(client)
+        fresh = await service.scan(
+            uncached,
+            lineage=lineage,
+            datasource_details=datasource_details,
+            dataset_schema=dataset_schema,
+            dataset_expressions=dataset_expressions,
+            get_artifact_users=get_artifact_users,
+            timeout=timeout,
+        )
+        for r in fresh:
+            cached[r.id] = r
+            client._scan_cache.set(r.id, r, ttl=scan_ttl)
+        logger.info("Scan completed: %d workspace(s) enriched", len(fresh))
+    else:
+        logger.info(
+            "All %d workspace(s) served from cache (ttl=%.0fs)",
+            len(ws_list),
+            scan_ttl,
+        )
+
+    for ws in ws_list:
+        result = cached.get(ws.id)
+        if result is not None:
+            ws._scan_cache = {ws.id: result}  # type: ignore[attr-defined]
         yield ws
 
 
