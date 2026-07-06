@@ -46,20 +46,27 @@ class LoggerFactory:
     def get_logger(self, name: str) -> logging.Logger:
         """Return (or create and cache) a logger for *name*.
 
-        The returned logger propagates to the root logger (``False``),
-        has its level set to the factory default, and uses the shared
-        formatted handler.
+        The returned logger does not propagate to root, has its level
+        set to the factory default, and uses the shared formatted
+        handler.  Existing handlers with the same formatter type are
+        replaced to avoid duplication across multiple factory instances.
         """
         if name not in self._loggers:
             logger = logging.getLogger(name)
             logger.propagate = False
             logger.setLevel(self._level)
-            # Avoid adding the same handler twice if the factory
-            # is re-used across multiple get_logger calls.
-            if self._handler not in logger.handlers:
-                logger.addHandler(self._handler)
+            self._ensure_handler(logger)
             self._loggers[name] = logger
         return self._loggers[name]
+
+    def _ensure_handler(self, logger: logging.Logger) -> None:
+        """Add our handler, replacing any with the same formatter type."""
+        from fabric_client.logging.formatter import FabricFormatter
+
+        for h in list(logger.handlers):
+            if isinstance(h.formatter, FabricFormatter):
+                logger.removeHandler(h)
+        logger.addHandler(self._handler)
 
     @property
     def level(self) -> int:
