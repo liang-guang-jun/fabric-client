@@ -9,6 +9,7 @@ import pydantic
 
 from fabric_client.core.collection import _AsyncListProxy
 from fabric_client.core.resource import Resource
+from fabric_client.models.scan import ScanTable
 
 if TYPE_CHECKING:
     from fabric_client.services.power_query import PowerQuerySection
@@ -71,6 +72,24 @@ class DatasetRefresh(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(populate_by_name=True)
 
 
+class RefreshSchedule(pydantic.BaseModel):
+    """Refresh schedule for an import-mode dataset."""
+
+    days: list[str] = pydantic.Field(default_factory=list)
+    times: list[str] = pydantic.Field(default_factory=list)
+    enabled: bool = False
+    local_time_zone_id: str | None = pydantic.Field(
+        default=None,
+        alias="localTimeZoneId",
+    )
+    notify_option: str | None = pydantic.Field(
+        default=None,
+        alias="notifyOption",
+    )
+
+    model_config = pydantic.ConfigDict(populate_by_name=True)
+
+
 class Dataset(Resource[DatasetModel]):
     """Represents a Power BI / Fabric dataset (semantic model storage).
 
@@ -94,6 +113,35 @@ class Dataset(Resource[DatasetModel]):
     def queries(self) -> _ScannedDatasetQueries:
         """Compatible alias for scanned_queries."""
         return _ScannedDatasetQueries(self)
+
+    @property
+    def tables(self) -> _ScannedDatasetTables:
+        """Lazy loader for table metadata from scan data (``ScanTable``)."""
+        return _ScannedDatasetTables(self)
+
+    @property
+    def schedule(self) -> _AsyncListProxy[RefreshSchedule]:
+        """Refresh schedule (``await`` or ``async for``).
+
+        Returns empty for non-refreshable datasets.
+        """
+        if not self.pydantic.is_refreshable:
+
+            async def _empty() -> list[RefreshSchedule]:
+                return []
+
+            return _AsyncListProxy(_empty)
+
+        from fabric_client.apis.powerbi.datasets import DatasetsAPI
+
+        api = DatasetsAPI(self._client)
+        ws_id = self.workspace.id if self.workspace else ""
+
+        async def _fetch() -> list[RefreshSchedule]:
+            s = await api.get_refresh_schedule(self.id, group_id=ws_id)
+            return [s]
+
+        return _AsyncListProxy(_fetch)
 
     # -- refresh -----------------------------------------------------------
 
@@ -164,6 +212,46 @@ class Dataset(Resource[DatasetModel]):
         api = DatasetsAPI(self._client)
         ws_id = self.workspace.id if self.workspace else ""
         await api.cancel_refresh(ws_id, self.id, refresh_id)
+
+
+class _ScannedDatasetTables:
+    """Lazy loader for dataset table metadata from scan data.
+
+    Returns :class:`ScanTable` objects (no additional API calls).
+    """
+
+    def __init__(self, dataset: Dataset) -> None:
+        self._ds = dataset
+        self._tables: list[ScanTable] | None = None
+
+    async def _resolve(self) -> list[ScanTable]:
+        if self._tables is not None:
+            return self._tables
+        self._tables = []
+
+        ws = self._ds.workspace
+        if ws is None:
+            return self._tables
+
+        try:
+            scanned = ws.scanned
+        except (RuntimeError, AttributeError):
+            return self._tables
+
+        for scan_ds in scanned.datasets:
+            if scan_ds.id != self._ds.id:
+                continue
+            self._tables = list(scan_ds.tables)
+            break
+
+        return self._tables
+
+    def __await__(self) -> Generator[Any, None, list[ScanTable]]:
+        return self._resolve().__await__()
+
+    async def __aiter__(self) -> AsyncIterator[ScanTable]:
+        for t in await self._resolve():
+            yield t
 
 
 class _ScannedDatasetQueries:

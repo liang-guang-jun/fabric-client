@@ -6,7 +6,7 @@ import asyncio
 from typing import TYPE_CHECKING, Any, cast
 
 from fabric_client.core.endpoint import Endpoint
-from fabric_client.models.dataset import DatasetRefresh
+from fabric_client.models.dataset import DatasetRefresh, RefreshSchedule
 
 if TYPE_CHECKING:
     from fabric_client.client import FabricClient
@@ -159,6 +159,29 @@ class DatasetsAPI:
             refreshId=refresh_id,
         )
         await self._client._request("DELETE", url)
+
+    async def get_refresh_schedule(
+        self,
+        dataset_id: str,
+        *,
+        group_id: str = "",
+    ) -> RefreshSchedule:
+        """Return the refresh schedule for a dataset.
+
+        API docs:
+        https://learn.microsoft.com/rest/api/power-bi/datasets/get-refresh-schedule-in-group
+        """
+        endpoint = Endpoint(
+            "GET",
+            "/groups/{groupId}/datasets/{datasetId}/refreshSchedule",
+        )
+        url = endpoint.build_url(
+            self._client.powerbi_base_url,
+            groupId=group_id,
+            datasetId=dataset_id,
+        )
+        data: dict[str, object] = await self._client._request("GET", url)
+        return RefreshSchedule.model_validate(data)
 
     # -- refresh helpers ------------------------------------------------------
 

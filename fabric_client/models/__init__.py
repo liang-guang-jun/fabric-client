@@ -3,7 +3,12 @@
 from __future__ import annotations
 
 from fabric_client.models.dataflow import Dataflow, DataflowModel, DataflowTransaction
-from fabric_client.models.dataset import Dataset, DatasetModel, DatasetRefresh
+from fabric_client.models.dataset import (
+    Dataset,
+    DatasetModel,
+    DatasetRefresh,
+    RefreshSchedule,
+)
 from fabric_client.models.report import Report, ReportModel
 from fabric_client.models.semantic_model import (
     SemanticModel,
@@ -18,6 +23,7 @@ __all__ = [
     "Dataset",
     "DatasetModel",
     "DatasetRefresh",
+    "RefreshSchedule",
     "Report",
     "ReportModel",
     "SemanticModel",
